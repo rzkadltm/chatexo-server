@@ -64,10 +64,57 @@ apiRouter.get('/health', (req, res) => {
   });
 });
 
+// /auth/exchange (client sends auth token, gets access/refresh)
+apiRouter.post('/auth/generate-token', (req, res) => {
+  try {
+    const { authToken, id, name } = req.body;
+    console.log(authToken, id, name)
+
+    if (authToken !== process.env.AUTH_TOKEN) {
+      return res.status(401).json({
+        error: 'Invalid auth token',
+        code: 'INVALID_AUTH_TOKEN'
+      });
+    }
+
+    if (!id || !name) {
+      return res.status(400).json({
+        error: 'ID and Name required',
+        code: 'MISSING_USER_DATA'
+      });
+    }
+
+    const userPayload = {
+      id,
+      name,
+      role: 'user'
+    };
+
+    const tokens = jwtService.generateTokenPair(userPayload);
+
+    res.json({
+      message: 'Token generated successfully',
+      user: userPayload,
+      ...tokens
+    });
+
+  } catch (error) {
+    console.error('Exchange error:', error);
+    res.status(500).json({ error: 'Token exchange failed' });
+  }
+});
+
 // Token refresh endpoint
 apiRouter.post('/auth/refresh', async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const { authToken, refreshToken } = req.body;
+
+    if (authToken !== process.env.AUTH_TOKEN) {
+      return res.status(401).json({
+        error: 'Invalid auth token',
+        code: 'INVALID_AUTH_TOKEN'
+      });
+    }
 
     if (!refreshToken) {
       return res.status(400).json({
@@ -238,11 +285,18 @@ app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
     code: 'NOT_FOUND',
+    method: req.method,
+    path: req.originalUrl,
     availableEndpoints: {
       health: `GET /api/${API_VERSION}/health`,
+      generateToken: `POST /api/${API_VERSION}/auth/generate-token`,
       refresh: `POST /api/${API_VERSION}/auth/refresh`,
+      validate: `POST /api/${API_VERSION}/auth/validate`,
+      logout: `POST /api/${API_VERSION}/auth/logout`,
       rooms: `GET /api/${API_VERSION}/rooms`,
-    }
+      createRoom: `POST /api/${API_VERSION}/rooms`
+    },
+    timestamp: new Date().toISOString()
   });
 });
 
