@@ -5,13 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: chatexo-server
     restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - AUTH_TOKEN=${AUTH_TOKEN:-your-secret-auth-token}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
-      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-key}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-your-refresh-secret-key}
+    env_file:
+      - .env
     ports:
       - "3001:3001"
     volumes:
