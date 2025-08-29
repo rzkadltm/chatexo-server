@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  chatexo-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatexo-server
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - AUTH_TOKEN=${AUTH_TOKEN:-your-secret-auth-token}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-key}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-your-refresh-secret-key}
+    networks:
+      - chatexo-network
+    expose:
+      - "3001"
+    volumes:
+      - ./logs:/app/logs
+
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - '80:80'     # HTTP
+      - '443:443'   # HTTPS
+      - '81:81'     # Admin UI
+    volumes:
+      - npm-data:/data
+      - npm-letsencrypt:/etc/letsencrypt
