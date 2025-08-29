@@ -30,6 +30,6 @@ services:
       - npm-letsencrypt:/etc/letsencrypt
 
 volumes:
-  logs
-  npm-data
-  npm-letsencrypt
+  logs:
+  npm-data:
+  npm-letsencrypt:
