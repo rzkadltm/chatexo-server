@@ -12,8 +12,8 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-key}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-your-refresh-secret-key}
-    expose:
-      - "3001"
+    ports:
+      - "3001:3001"
     volumes:
       - logs:/app/logs
 
