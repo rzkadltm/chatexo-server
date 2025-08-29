@@ -15,7 +15,7 @@ services:
     expose:
       - "3001"
     volumes:
-      - ./logs:/app/logs
+      - logs:/app/logs
 
   nginx-proxy-manager:
     image: 'jc21/nginx-proxy-manager:latest'
@@ -28,3 +28,8 @@ services:
     volumes:
       - npm-data:/data
       - npm-letsencrypt:/etc/letsencrypt
+
+volumes:
+  logs
+  npm-data
+  npm-letsencrypt
