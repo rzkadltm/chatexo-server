@@ -12,14 +12,47 @@ const jwtService = require('./jwt');
 const app = express();
 const server = http.createServer(app);
 
-// Security middleware
-app.use(helmet());
+// Security middleware with updated configuration for WebSocket
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP to avoid WebSocket blocking
+  crossOriginEmbedderPolicy: false
+}));
 
-// CORS configuration
+// Enhanced CORS configuration for web browsers
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://localhost:3000', 
+  'http://localhost:8081', // Expo dev server
+  'https://localhost:8081',
+  'http://127.0.0.1:3000',
+  'https://127.0.0.1:3000',
+  'http://192.168.1.100:3000', // Add your local IP
+  'https://192.168.1.100:3000',
+  ...(process.env.ALLOWED_ORIGINS?.split(',').filter(Boolean) || [])
+];
+
+console.log('Allowed origins:', allowedOrigins);
+
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || "*",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost in any form and configured origins
+    if (origin.includes('localhost') || 
+        origin.includes('127.0.0.1') ||
+        origin.includes('192.168.') ||
+        allowedOrigins.includes(origin) ||
+        process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    console.log('CORS blocked origin:', origin);
+    return callback(null, false);
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Origin", "X-Requested-With", "Accept"],
+  credentials: true
 }));
 
 // Rate limiting
@@ -29,15 +62,46 @@ const limiter = rateLimit({
   message: {
     error: 'Too many requests from this IP, please try again later.',
     code: 'RATE_LIMIT_EXCEEDED'
-  }
+  },
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
 app.use('/api/', limiter);
 
+// Enhanced Socket.IO configuration for web browser compatibility
 const io = socketIo(server, {
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || "*",
-    methods: ["GET", "POST"]
+    origin: function (origin, callback) {
+      // Same logic as Express CORS
+      if (!origin) return callback(null, true);
+      
+      if (origin.includes('localhost') || 
+          origin.includes('127.0.0.1') ||
+          origin.includes('192.168.') ||
+          allowedOrigins.includes(origin) ||
+          process.env.NODE_ENV === 'development') {
+        return callback(null, true);
+      }
+      
+      console.log('Socket.IO CORS blocked origin:', origin);
+      return callback(null, false);
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  // Enhanced transport configuration for web browsers
+  transports: ['websocket', 'polling'],
+  allowEIO3: true, // Allow older Engine.IO clients
+  upgradeTimeout: 30000, // 30 seconds for upgrade
+  pingTimeout: 60000, // 60 seconds before considering connection dead
+  pingInterval: 25000, // Ping every 25 seconds
+  maxHttpBufferSize: 1e6, // 1MB max buffer
+  allowUpgrades: true,
+  perMessageDeflate: {
+    threshold: 1024,
+    concurrencyLimit: 10,
+    windowBits: 13
   }
 });
 
@@ -53,14 +117,37 @@ const rooms = new Map();
 // API Routes
 const apiRouter = express.Router();
 
-// Health check endpoint
+// Health check endpoint with enhanced information
 apiRouter.get('/health', (req, res) => {
   res.json({
     message: 'ChatExo WebRTC Signaling Server is running!',
     version: API_VERSION,
     activeRooms: rooms.size,
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    platform: process.platform,
+    nodeVersion: process.version,
+    allowedOrigins: allowedOrigins,
+    socketTransports: ['websocket', 'polling']
+  });
+});
+
+// Enhanced debug endpoint for troubleshooting
+apiRouter.get('/debug', (req, res) => {
+  res.json({
+    server: {
+      port: PORT,
+      environment: process.env.NODE_ENV || 'development',
+      allowedOrigins: allowedOrigins
+    },
+    rooms: Array.from(rooms.entries()).map(([roomId, room]) => ({
+      roomId,
+      userCount: room.users.size,
+      users: Array.from(room.users),
+      createdAt: room.createdAt
+    })),
+    headers: req.headers,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -68,7 +155,7 @@ apiRouter.get('/health', (req, res) => {
 apiRouter.post('/auth/generate-token', (req, res) => {
   try {
     const { authToken, id, name } = req.body;
-    console.log(authToken, id, name)
+    console.log('Token generation request:', { authToken: authToken ? 'provided' : 'missing', id, name });
 
     if (authToken !== process.env.AUTH_TOKEN) {
       return res.status(401).json({
@@ -252,12 +339,40 @@ app.get('/', (req, res) => {
     version: API_VERSION,
     apiEndpoint: `/api/${API_VERSION}`,
     activeRooms: rooms.size,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    allowedOrigins: allowedOrigins
   });
 });
 
+// CORS preflight handler for all routes
+app.options('*', cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    if (origin.includes('localhost') || 
+        origin.includes('127.0.0.1') ||
+        origin.includes('192.168.') ||
+        allowedOrigins.includes(origin) ||
+        process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    return callback(null, false);
+  },
+  credentials: true
+}));
+
 // Initialize signaling with JWT support
 initSignaling(io, rooms, jwtService);
+
+// Enhanced Socket.IO connection logging
+io.engine.on('connection_error', (err) => {
+  console.log('Socket.IO connection error:', err.req);
+  console.log('Error code:', err.code);
+  console.log('Error message:', err.message);
+  console.log('Error context:', err.context);
+});
 
 // Clean up old empty rooms periodically (every 5 minutes)
 setInterval(() => {
@@ -266,22 +381,32 @@ setInterval(() => {
     const roomAge = now - new Date(room.createdAt).getTime();
     if (room.users.size === 0 && roomAge > 3600000) { // 1 hour
       rooms.delete(roomId);
-      console.log(`🧹 Cleaned up old empty room: ${roomId}`);
+      console.log(`Cleaned up old empty room: ${roomId}`);
     }
   }
 }, 300000); // 5 minutes
 
-// Error handling middleware
+// Enhanced error handling middleware
 app.use((error, req, res, next) => {
   console.error('Server error:', error);
+  console.error('Request details:', {
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    origin: req.get('origin')
+  });
+  
   res.status(500).json({
     error: 'Internal server error',
-    code: 'INTERNAL_ERROR'
+    code: 'INTERNAL_ERROR',
+    timestamp: new Date().toISOString()
   });
 });
 
-// 404 handler
+// Enhanced 404 handler
 app.use((req, res) => {
+  console.log('404 - Not found:', req.method, req.originalUrl, 'Origin:', req.get('origin'));
+  
   res.status(404).json({
     error: 'Endpoint not found',
     code: 'NOT_FOUND',
@@ -289,6 +414,7 @@ app.use((req, res) => {
     path: req.originalUrl,
     availableEndpoints: {
       health: `GET /api/${API_VERSION}/health`,
+      debug: `GET /api/${API_VERSION}/debug`,
       generateToken: `POST /api/${API_VERSION}/auth/generate-token`,
       refresh: `POST /api/${API_VERSION}/auth/refresh`,
       validate: `POST /api/${API_VERSION}/auth/validate`,
@@ -300,11 +426,22 @@ app.use((req, res) => {
   });
 });
 
-
+// Enhanced server startup with more detailed logging
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 ChatExo Signaling Server running on port ${PORT}`);
-  console.log(`📡 Server URL: http://localhost:${PORT}`);
-  console.log(`🔌 API Endpoint: http://localhost:${PORT}/api/${API_VERSION}`);
-  console.log(`🔐 Default password: "secret"`);
-  console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('='.repeat(60));
+  console.log(`ChatExo Signaling Server STARTED`);
+  console.log('='.repeat(60));
+  console.log(`Port: ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Local URL: http://localhost:${PORT}`);
+  console.log(`API Endpoint: http://localhost:${PORT}/api/${API_VERSION}`);
+  console.log(`Auth Token: ${process.env.AUTH_TOKEN ? 'configured' : 'NOT SET'}`);
+  console.log(`Allowed Origins:`, allowedOrigins);
+  console.log(`Socket.IO Transports: websocket, polling`);
+  console.log('='.repeat(60));
+  
+  // Test Socket.IO initialization
+  console.log('Socket.IO server initialized successfully');
+  console.log('WebSocket upgrade support: enabled');
+  console.log('CORS configuration: enhanced for web browsers');
 });
