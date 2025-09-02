@@ -1,0 +1,30 @@
+services:
+  chatexo-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatexo-server
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3001:3001"
+    volumes:
+      - logs:/app/logs
+
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - '80:80'     # HTTP
+      - '443:443'   # HTTPS
+      - '81:81'     # Admin UI
+    volumes:
+      - npm-data:/data
+      - npm-letsencrypt:/etc/letsencrypt
+
+volumes:
+  logs:
+  npm-data:
+  npm-letsencrypt:
