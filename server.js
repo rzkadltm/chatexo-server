@@ -17,9 +17,26 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || "*",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+      "http://localhost:3000",
+      "http://localhost:19006",
+      "https://localhost:3000", 
+      "https://localhost:19006",
+      "https://chatexo-server.duckdns.org"
+    ];
+    
+    if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    return callback(new Error('Not allowed by CORS'));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
 
 // Rate limiting
@@ -36,9 +53,35 @@ app.use('/api/', limiter);
 
 const io = socketIo(server, {
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || "*",
-    methods: ["GET", "POST"]
-  }
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps)
+      if (!origin) return callback(null, true);
+      
+      const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:19006", // Expo web dev server
+        "https://localhost:3000",
+        "https://localhost:3001",
+        "https://localhost:19006",
+        "https://chatexo-server.duckdns.org",
+        // Add your actual web domain here
+      ];
+      
+      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      return callback(new Error('Not allowed by CORS'));
+    },
+    methods: ["GET", "POST"],
+    credentials: true,
+    allowEIO3: true // Allow Engine.IO v3 for compatibility
+  },
+  allowEIO3: true,
+  transports: ['polling', 'websocket'],
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 app.use(express.json({ limit: '10mb' }));
