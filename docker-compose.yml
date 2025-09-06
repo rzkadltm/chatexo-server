@@ -12,6 +12,8 @@ services:
     volumes:
       - logs:/app/logs
       - .:/app
+    networks:
+      - redis_redisnet
 
   luminaire-frontend:
     build:
@@ -38,3 +40,7 @@ volumes:
   logs:
   npm-data:
   npm-letsencrypt:
+
+networks:
+  redis_redisnet:
+    external: true
