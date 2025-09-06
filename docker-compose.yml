@@ -23,6 +23,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:80"   # frontend available at port 3000 (or skip and l>
+    networks:
+      - redis_redisnet
 
   nginx-proxy-manager:
     image: 'jc21/nginx-proxy-manager:latest'
@@ -35,6 +37,8 @@ services:
     volumes:
       - npm-data:/data
       - npm-letsencrypt:/etc/letsencrypt
+    networks:
+      - redis_redisnet
 
 volumes:
   logs:
