@@ -13,6 +13,15 @@ services:
       - logs:/app/logs
       - .:/app
 
+  luminaire-frontend:
+    build:
+      context: ../luminaire-global-coorp
+      dockerfile: Dockerfile
+    container_name: luminaire-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"   # frontend available at port 3000 (or skip and l>
+
   nginx-proxy-manager:
     image: 'jc21/nginx-proxy-manager:latest'
     container_name: nginx-proxy-manager
