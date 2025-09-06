@@ -34,34 +34,7 @@ services:
       - npm-data:/data
       - npm-letsencrypt:/etc/letsencrypt
 
-  redis:
-    image: redis:7-alpine
-    container_name: chatexo-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: chatexo-redis-commander
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-    ports:
-      - "8081:8081"
-    depends_on:
-      - redis
-    restart: unless-stopped
-
 volumes:
   logs:
   npm-data:
   npm-letsencrypt:
-  redis_data:
